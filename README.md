@@ -4,22 +4,31 @@ Standalone partner compliance audit — no BrowserBase, no Redis, no Next.js. Ru
 
 ## Setup
 
+### One-line install (Mac)
+
 ```bash
-npm install
-cp .env.example .env
-# Fill in AWS_BEARER_TOKEN_BEDROCK and point the CSV paths to your downloaded sheets
+curl -fsSL https://raw.githubusercontent.com/aqureshiest/partner-audit-cli/main/install.sh | bash
 ```
 
-### Prepare the CSV files
+This installs Homebrew (if needed), Node.js, all npm dependencies, and Playwright Chromium. It clones the repo to `~/partner-audit-cli` and wires up `.env` automatically.
 
-Download two tabs from the Google Sheet as CSV:
+After it completes, set your AWS Bedrock token:
 
-| Sheet tab | Save as |
-|---|---|
-| **Audit Links** | `partner-links.csv` |
-| **ComplianceRules** | `compliance-rules.csv` |
+```bash
+cd ~/partner-audit-cli
+nano .env  # set AWS_BEARER_TOKEN_BEDROCK=<your-token>
+```
 
-Place them in the project root (or set `PARTNER_CSV` / `COMPLIANCE_RULES_CSV` to custom paths).
+### Manual setup
+
+```bash
+git clone https://github.com/aqureshiest/partner-audit-cli.git
+cd partner-audit-cli
+npm install
+npx playwright install chromium
+cp .env.example .env
+# Fill in AWS_BEARER_TOKEN_BEDROCK
+```
 
 ## Usage
 
