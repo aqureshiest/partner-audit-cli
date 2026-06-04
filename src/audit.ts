@@ -197,7 +197,7 @@ async function main() {
     let resolvedOutputCsv = outputCsv;
 
     if (!flagsProvided) {
-        const answers = await promptForOptions(allPartners.map((p) => p.name));
+        const answers = await promptForOptions([...new Set(allPartners.map((p) => p.name))]);
         resolvedPartnerFilters = answers.partnerFilters;
         resolvedTypeFilter = answers.typeFilter;
         resolvedOutputCsv = answers.outputCsv;
