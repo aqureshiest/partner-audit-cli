@@ -4,7 +4,7 @@
 # Or:     REPO_URL=git@github.com:org/repo.git bash install.sh
 set -euo pipefail
 
-REPO_URL="${REPO_URL:-https://github.com/meetearnest/partner-audit-cli.git}"
+REPO_URL="${REPO_URL:-https://github.com/aqureshiest/partner-audit-cli.git}"
 INSTALL_DIR="${INSTALL_DIR:-$HOME/partner-audit-cli}"
 NODE_MIN=20
 
