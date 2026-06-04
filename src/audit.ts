@@ -17,6 +17,7 @@ import { loadOfficialRates } from "./rates.js";
 import { scrapeUrls } from "./scraper.js";
 import { analyzePage, type UrlResult } from "./analyze.js";
 import { writeFileSync } from "fs";
+import { checkbox, select, confirm } from "@inquirer/prompts";
 
 // --- CLI args ---
 const args = process.argv.slice(2);
@@ -26,6 +27,39 @@ const partnerFilters: string[] = args
 const typeIdx = args.indexOf("--type");
 const typeFilter = typeIdx !== -1 ? (args[typeIdx + 1] ?? "").toUpperCase() || null : null;
 const outputCsv = args.includes("--output") && args[args.indexOf("--output") + 1] === "csv";
+
+const flagsProvided = partnerFilters.length > 0 || typeFilter !== null || outputCsv;
+
+async function promptForOptions(allPartnerNames: string[]): Promise<{
+    partnerFilters: string[];
+    typeFilter: string | null;
+    outputCsv: boolean;
+}> {
+    const selectedPartners = await checkbox({
+        message: "Select partners to audit:",
+        choices: [
+            { name: "All partners", value: "__all__" },
+            ...allPartnerNames.map((name) => ({ name, value: name })),
+        ],
+    });
+
+    const auditAll = selectedPartners.includes("__all__") || selectedPartners.length === 0;
+    const chosenPartners = auditAll ? [] : selectedPartners;
+
+    const chosenType = await select({
+        message: "Filter by loan type?",
+        choices: [
+            { name: "All", value: null },
+            { name: "SLR — Student Loan Refinancing", value: "SLR" },
+            { name: "SLO — Student Loan Origination", value: "SLO" },
+            { name: "PL  — Personal Loans", value: "PL" },
+        ],
+    });
+
+    const chosenCsv = await confirm({ message: "Export results to CSV?", default: true });
+
+    return { partnerFilters: chosenPartners, typeFilter: chosenType, outputCsv: chosenCsv };
+}
 
 // --- Helpers ---
 function urlsForPartner(p: PartnerRow, urlType: string | null): Array<{ url: string; urlType: string }> {
@@ -158,8 +192,19 @@ async function main() {
         loadOfficialRates(),
     ]);
 
-    const partners = partnerFilters.length > 0
-        ? allPartners.filter((p) => partnerFilters.some((f) => p.name.toLowerCase().includes(f.toLowerCase())))
+    let resolvedPartnerFilters = partnerFilters;
+    let resolvedTypeFilter = typeFilter;
+    let resolvedOutputCsv = outputCsv;
+
+    if (!flagsProvided) {
+        const answers = await promptForOptions(allPartners.map((p) => p.name));
+        resolvedPartnerFilters = answers.partnerFilters;
+        resolvedTypeFilter = answers.typeFilter;
+        resolvedOutputCsv = answers.outputCsv;
+    }
+
+    const partners = resolvedPartnerFilters.length > 0
+        ? allPartners.filter((p) => resolvedPartnerFilters.some((f) => p.name.toLowerCase().includes(f.toLowerCase())))
         : allPartners;
 
     if (partners.length === 0) {
@@ -170,7 +215,7 @@ async function main() {
     // Collect all URLs to scrape
     const tasks: Array<{ url: string; urlType: string; partnerName: string }> = [];
     for (const partner of partners) {
-        for (const { url, urlType } of urlsForPartner(partner, typeFilter)) {
+        for (const { url, urlType } of urlsForPartner(partner, resolvedTypeFilter)) {
             tasks.push({ url, urlType, partnerName: partner.name });
         }
     }
@@ -197,9 +242,11 @@ async function main() {
 
     printResults(results);
 
-    const filename = `audit-${new Date().toISOString().slice(0, 10)}.csv`;
-    writeFileSync(filename, toCsv(results, officialRates));
-    console.log(`\nResults saved to ${filename}`);
+    if (resolvedOutputCsv) {
+        const filename = `audit-${new Date().toISOString().slice(0, 10)}.csv`;
+        writeFileSync(filename, toCsv(results, officialRates));
+        console.log(`\nResults saved to ${filename}`);
+    }
 }
 
 main().catch((err) => {
