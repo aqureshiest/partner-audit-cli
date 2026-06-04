@@ -45,10 +45,17 @@ ensure_node() {
 ensure_node
 
 # Make sure nvm-managed node is on PATH for the rest of this script
-if [ -f "$HOME/.nvm/nvm.sh" ]; then
-    export NVM_DIR="$HOME/.nvm"
+export NVM_DIR="$HOME/.nvm"
+if [ -f "$NVM_DIR/nvm.sh" ]; then
     # shellcheck source=/dev/null
     source "$NVM_DIR/nvm.sh"
+fi
+
+# Ensure nvm init is in ~/.zshrc so new terminals have node/npm on PATH
+NVM_INIT_BLOCK='export NVM_DIR="$HOME/.nvm"\n[ -s "$NVM_DIR/nvm.sh" ] && source "$NVM_DIR/nvm.sh"'
+if ! grep -q 'NVM_DIR' "$HOME/.zshrc" 2>/dev/null; then
+    log "Adding nvm init to ~/.zshrc..."
+    printf '\n# nvm (added by partner-audit-cli installer)\n%b\n' "$NVM_INIT_BLOCK" >> "$HOME/.zshrc"
 fi
 
 log "Node $(node -v) / npm $(npm -v)"
@@ -101,6 +108,9 @@ echo "  partner-audit-cli installed at $INSTALL_DIR"
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo ""
 echo "  Next steps:"
+echo ""
+echo "  0. Reload your shell so node/npm are on PATH:"
+echo "       source ~/.zshrc"
 echo ""
 echo "  1. Set your AWS Bedrock bearer token:"
 echo "       cd $INSTALL_DIR && nano .env"
