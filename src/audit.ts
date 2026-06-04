@@ -204,7 +204,11 @@ async function main() {
     }
 
     const partners = resolvedPartnerFilters.length > 0
-        ? allPartners.filter((p) => resolvedPartnerFilters.some((f) => p.name.toLowerCase().includes(f.toLowerCase())))
+        ? allPartners.filter((p) =>
+            flagsProvided
+                ? resolvedPartnerFilters.some((f) => p.name.toLowerCase().includes(f.toLowerCase()))
+                : resolvedPartnerFilters.includes(p.name)
+          )
         : allPartners;
 
     if (partners.length === 0) {
