@@ -1,41 +1,56 @@
 #!/usr/bin/env bash
-# install.sh — one-shot setup for partner-audit-cli on a fresh Mac
-# Usage:  curl -fsSL https://<your-host>/install.sh | bash
-# Or:     REPO_URL=git@github.com:org/repo.git bash install.sh
+# install.sh — one-shot setup for partner-audit-cli on a fresh Mac (no sudo required)
+# Usage:  curl -fsSL https://raw.githubusercontent.com/aqureshiest/partner-audit-cli/main/install.sh | bash
 set -euo pipefail
 
 REPO_URL="${REPO_URL:-https://github.com/aqureshiest/partner-audit-cli.git}"
 INSTALL_DIR="${INSTALL_DIR:-$HOME/partner-audit-cli}"
 NODE_MIN=20
+NVM_VERSION="v0.40.3"
 
 GRN='\033[0;32m'; YLW='\033[1;33m'; RED='\033[0;31m'; NC='\033[0m'
 log()  { echo -e "${GRN}==>${NC} $*"; }
 warn() { echo -e "${YLW}WARN:${NC} $*"; }
 die()  { echo -e "${RED}ERROR:${NC} $*" >&2; exit 1; }
 
-[[ "$(uname)" == "Darwin" ]] || die "This installer targets macOS. For Linux, set up Node + Playwright manually."
+[[ "$(uname)" == "Darwin" ]] || die "This installer targets macOS."
 
-# ── Homebrew ────────────────────────────────────────────────────────────────
-if ! command -v brew &>/dev/null; then
-    log "Installing Homebrew..."
-    /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
-    # Add brew to PATH for the rest of this script (Apple Silicon path)
-    eval "$(/opt/homebrew/bin/brew shellenv 2>/dev/null || /usr/local/bin/brew shellenv 2>/dev/null)"
-fi
-
-# ── Node.js ─────────────────────────────────────────────────────────────────
-if command -v node &>/dev/null; then
-    current=$(node -v | sed 's/v//' | cut -d. -f1)
-    if [[ "$current" -ge "$NODE_MIN" ]]; then
-        log "Node.js $(node -v) already satisfies >= $NODE_MIN"
-    else
-        log "Upgrading Node.js (found $current, need $NODE_MIN)..."
-        brew upgrade node || brew install node
+# ── Node.js via nvm (no sudo needed) ────────────────────────────────────────
+ensure_node() {
+    # If a sufficient Node is already on PATH, we're done
+    if command -v node &>/dev/null; then
+        local current
+        current=$(node -v | sed 's/v//' | cut -d. -f1)
+        if [[ "$current" -ge "$NODE_MIN" ]]; then
+            log "Node.js $(node -v) already satisfies >= $NODE_MIN"
+            return
+        fi
     fi
-else
-    log "Installing Node.js via Homebrew..."
-    brew install node
+
+    # Install or load nvm
+    if [ ! -f "$HOME/.nvm/nvm.sh" ]; then
+        log "Installing nvm $NVM_VERSION (no sudo required)..."
+        curl -fsSL "https://raw.githubusercontent.com/nvm-sh/nvm/${NVM_VERSION}/install.sh" | bash
+    fi
+
+    export NVM_DIR="$HOME/.nvm"
+    # shellcheck source=/dev/null
+    source "$NVM_DIR/nvm.sh"
+
+    log "Installing Node.js $NODE_MIN via nvm..."
+    nvm install "$NODE_MIN"
+    nvm use "$NODE_MIN"
+}
+
+ensure_node
+
+# Make sure nvm-managed node is on PATH for the rest of this script
+if [ -f "$HOME/.nvm/nvm.sh" ]; then
+    export NVM_DIR="$HOME/.nvm"
+    # shellcheck source=/dev/null
+    source "$NVM_DIR/nvm.sh"
 fi
+
 log "Node $(node -v) / npm $(npm -v)"
 
 # ── Repo ─────────────────────────────────────────────────────────────────────
