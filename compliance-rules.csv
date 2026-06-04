@@ -1,0 +1,46 @@
+Claim,Product,Result,"If Yes, Then Flag",And recommend (i.e. Compliance Comment)
+guaranteed approval,ALL,Yes,HIGH Risk,Request verbiage update
+100% approval,ALL,Yes,HIGH Risk,Request verbiage update
+instant approval,ALL,Yes,HIGH Risk,Request verbiage update
+no credit check,ALL,Yes,HIGH Risk,Request verbiage update
+without a credit check,ALL,Yes,HIGH Risk,Request verbiage update
+regardless of credit,ALL,Yes,HIGH Risk,Request verbiage update
+0% interest,ALL,Yes,HIGH Risk,Request verbiage update
+free loan,ALL,Yes,HIGH Risk,Request verbiage update
+no fees ever ,Personal Loans,Yes,HIGH Risk,Request verbiage update
+best rates,ALL,Yes,HIGH Risk,Request verbiage update
+lowest rates,ALL,Yes,HIGH Risk,Request verbiage update
+cheapest rates,ALL,Yes,HIGH Risk,Request verbiage update
+get cash today ,Personal Loans,Yes,HIGH Risk,Request verbiage update
+better than all federal loans,ALL,Yes,HIGH Risk,Request verbiage update
+always cheaper than federal loans,ALL,Yes,HIGH Risk,Request verbiage update
+beats every competitor,ALL,Yes,HIGH Risk,Request verbiage update
+better than every competitor,ALL,Yes,HIGH Risk,Request verbiage update
+wont lose federal benefits,ALL,Yes,HIGH Risk,Request verbiage update
+no risk in refinancing,ALL,Yes,HIGH Risk,Request verbiage update
+approval in 24 hours,ALL,Yes,MEDIUM Risk,Request verbiage update
+easy approval ,ALL,Yes,MEDIUM Risk,Request verbiage update
+high approval rate,ALL,Yes,MEDIUM Risk,Request verbiage update
+fast approval,ALL,Yes,MEDIUM Risk,Request verbiage update
+approval with a cosigner,ALL,Yes,MEDIUM Risk,Request verbiage update
+Earnest origination,Student Loan Origination,Yes,MEDIUM Risk,Add SLO Lending ID
+Earnest refinance,Student Loan Refinance,Yes,MEDIUM Risk,Add SLR Lending ID
+Earnest Personal Loans,Personal Loans,Yes,MEDIUM Risk,Add PL Lending ID
+same-day funding ,Personal Loans,Yes,HIGH Risk,add disclosure
+24 hour funding,Personal Loans,Yes,HIGH Risk,add disclosure
+next day funding,ALL,Yes,HIGH Risk,add disclosure
+15 second approval ,ALL,Yes,HIGH Risk,add disclosure
+"Any savings claims in relation to refinancing (save $X, avg savings, you will save..)",ALL,Yes,HIGH Risk,add disclosure
+"Terms  listed numerically (5,7,10 etc)",ALL,Yes,HIGH Risk,The required reg-z advertisement disclosure (loan cost example) must be present
+APR listed ,ALL,Yes,HIGH Risk,add disclosure
+Lowest  rates,ALL,Yes,HIGH Risk,add disclosure
+Skip a pay,ALL,Yes,HIGH Risk,add disclosure
+9 month grace period,ALL,Yes,HIGH Risk,add disclosure
+"auto pay, .25% auto pay discount",ALL,Yes,HIGH Risk,add disclosure
+refi my refi ,ALL,Yes,HIGH Risk,add disclosure
+eligibility criteria,ALL,Yes,HIGH Risk,add disclosure
+minimum FICO,ALL,Yes,HIGH Risk,add disclosure
+No Fees,Personal Loans,Yes,HIGH Risk,add disclosure
+No origination fee,Personal Loans,Yes,HIGH Risk,add disclosure
+Rate Drop Reward,Personal Loans,Yes,HIGH Risk,add disclosure
+Nevada,ALL,Yes,HIGH Risk,Update state elibibility

@@ -1,0 +1,23 @@
+{
+  "name": "partner-audit-cli",
+  "version": "1.0.0",
+  "description": "Standalone partner compliance audit using local Chrome",
+  "type": "module",
+  "scripts": {
+    "audit": "tsx src/audit.ts",
+    "compare": "tsx src/compare.ts"
+  },
+  "dependencies": {
+    "@aws-sdk/client-bedrock-runtime": "^3.0.0",
+    "csv-parser": "^3.0.0",
+    "html-to-text": "^9.0.5",
+    "playwright": "^1.54.1"
+  },
+  "devDependencies": {
+    "@types/html-to-text": "^9.0.4",
+    "@types/node": "^22.0.0",
+    "dotenv": "^17.4.2",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.0"
+  }
+}
