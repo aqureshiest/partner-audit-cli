@@ -4,6 +4,7 @@
   "description": "Standalone partner compliance audit using local Chrome",
   "type": "module",
   "scripts": {
+    "preaudit": "git pull --ff-only && npm ci --prefer-offline 2>/dev/null || true",
     "audit": "tsx src/audit.ts",
     "compare": "tsx src/compare.ts"
   },
