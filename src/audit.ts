@@ -36,7 +36,7 @@ async function promptForOptions(allPartnerNames: string[]): Promise<{
     outputCsv: boolean;
 }> {
     const selectedPartners = await checkbox({
-        message: "Select partners to audit:",
+        message: "Select partners to audit (space to select, enter to confirm):",
         choices: [
             { name: "All partners", value: "__all__" },
             ...allPartnerNames.map((name) => ({ name, value: name })),
