@@ -16,7 +16,7 @@ After it completes, set your AWS Bedrock token:
 
 ```bash
 cd ~/partner-audit-cli
-nano .env  # set AWS_BEARER_TOKEN_BEDROCK=<your-token>
+# export AWS_BEARER_TOKEN_BEDROCK=<your-token>
 ```
 
 ### Manual setup

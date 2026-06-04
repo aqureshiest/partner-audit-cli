@@ -1,3 +1,5 @@
 .scrape-cache/
 .env
 node_modules/
+
+*.csv
