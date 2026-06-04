@@ -97,8 +97,6 @@ if [ -n "$chromium_bin" ]; then
         echo "CHROME_PATH=$chromium_bin" >> .env
     fi
     log "CHROME_PATH → $chromium_bin"
-else
-    warn "Could not locate Playwright Chromium binary; set CHROME_PATH in .env manually."
 fi
 
 # ── Done ──────────────────────────────────────────────────────────────────────
