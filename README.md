@@ -39,6 +39,9 @@ npm run audit
 # Single partner
 npm run audit -- --partner "SoFi"
 
+# Multiple partners
+npm run audit -- --partner "SoFi" --partner "College Investor" --partner "NerdWallet"
+
 # Filter by loan type (SLR, SLO, PL)
 npm run audit -- --type SLR
 
