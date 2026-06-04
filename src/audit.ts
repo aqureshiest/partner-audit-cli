@@ -17,7 +17,7 @@ import { loadOfficialRates } from "./rates.js";
 import { scrapeUrls } from "./scraper.js";
 import { analyzePage, type UrlResult } from "./analyze.js";
 import { writeFileSync } from "fs";
-import { checkbox, select, confirm } from "@inquirer/prompts";
+import { checkbox, select } from "@inquirer/prompts";
 
 // --- CLI args ---
 const args = process.argv.slice(2);
@@ -56,9 +56,7 @@ async function promptForOptions(allPartnerNames: string[]): Promise<{
         ],
     });
 
-    const chosenCsv = await confirm({ message: "Export results to CSV?", default: true });
-
-    return { partnerFilters: chosenPartners, typeFilter: chosenType, outputCsv: chosenCsv };
+    return { partnerFilters: chosenPartners, typeFilter: chosenType, outputCsv: true };
 }
 
 // --- Helpers ---
