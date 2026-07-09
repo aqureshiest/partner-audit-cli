@@ -17,6 +17,7 @@ import { loadOfficialRates } from "./rates.js";
 import { scrapeUrls } from "./scraper.js";
 import { analyzePage, type UrlResult } from "./analyze.js";
 import { writeFileSync } from "fs";
+import { spawn } from "child_process";
 
 // --- CLI args ---
 const args = process.argv.slice(2);
@@ -200,6 +201,14 @@ async function main() {
     const filename = `audit-${new Date().toISOString().slice(0, 10)}.csv`;
     writeFileSync(filename, toCsv(results, officialRates));
     console.log(`\nResults saved to ${filename}`);
+    openFile(filename);
+}
+
+function openFile(filePath: string): void {
+    const command = process.platform === "darwin" ? "open" : process.platform === "win32" ? "start" : "xdg-open";
+    const args = process.platform === "win32" ? ["", filePath] : [filePath];
+    const shell = process.platform === "win32";
+    spawn(command, args, { detached: true, stdio: "ignore", shell }).unref();
 }
 
 main().catch((err) => {
