@@ -4,11 +4,13 @@
   "description": "Standalone partner compliance audit using local Chrome",
   "type": "module",
   "scripts": {
+    "preaudit": "git pull --ff-only -q && npm ci --prefer-offline --silent 2>/dev/null || true",
     "audit": "tsx src/audit.ts",
     "compare": "tsx src/compare.ts"
   },
   "dependencies": {
     "@aws-sdk/client-bedrock-runtime": "^3.0.0",
+    "@inquirer/prompts": "^8.5.2",
     "csv-parser": "^3.0.0",
     "html-to-text": "^9.0.5",
     "playwright": "^1.54.1"

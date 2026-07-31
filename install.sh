@@ -97,8 +97,6 @@ if [ -n "$chromium_bin" ]; then
         echo "CHROME_PATH=$chromium_bin" >> .env
     fi
     log "CHROME_PATH → $chromium_bin"
-else
-    warn "Could not locate Playwright Chromium binary; set CHROME_PATH in .env manually."
 fi
 
 # ── Done ──────────────────────────────────────────────────────────────────────
@@ -109,16 +107,18 @@ echo "━━━━━━━━━━━━━━━━━━━━━━━━�
 echo ""
 echo "  Next steps:"
 echo ""
-echo "  0. Reload your shell so node/npm are on PATH:"
-echo "       source ~/.zshrc"
-echo ""
-echo "  1. Set your AWS Bedrock bearer token:"
-echo "       cd $INSTALL_DIR && nano .env"
-echo "       # set AWS_BEARER_TOKEN_BEDROCK=<your-token>"
+echo "  1. Set your AWS Bedrock bearer token in the new terminal:"
+echo "       nano .env   # set AWS_BEARER_TOKEN_BEDROCK=<your-token>"
 echo ""
 echo "  2. Run:"
-echo "       cd $INSTALL_DIR && npm run audit"
-echo "       npm run audit -- --partner \"SoFi\"   # single partner"
-echo "       npm run audit -- --output csv        # export CSV"
+echo "       npm run audit"
 echo ""
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+echo ""
+log "Opening a new terminal window..."
+osascript &>/dev/null <<EOF
+tell application "Terminal"
+    activate
+    do script "cd \"$INSTALL_DIR\" && echo 'Ready! Run: npm run audit'"
+end tell
+EOF
