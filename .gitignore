@@ -3,3 +3,5 @@
 node_modules/
 
 *.csv
+*service-account*.json
+*-key*.json
