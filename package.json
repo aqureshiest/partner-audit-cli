@@ -12,6 +12,7 @@
     "@aws-sdk/client-bedrock-runtime": "^3.0.0",
     "@inquirer/prompts": "^8.5.2",
     "csv-parser": "^3.0.0",
+    "googleapis": "^176.0.0",
     "html-to-text": "^9.0.5",
     "playwright": "^1.54.1"
   },
