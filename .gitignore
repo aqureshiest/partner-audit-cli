@@ -3,5 +3,7 @@
 node_modules/
 
 *.csv
+*.xlsx
 *service-account*.json
 *-key*.json
+.DS_Store
