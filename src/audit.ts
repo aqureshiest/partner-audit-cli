@@ -6,6 +6,7 @@
  *   tsx src/audit.ts                          # audit all partners, all URL types
  *   tsx src/audit.ts --partner "SoFi"         # single partner
  *   tsx src/audit.ts --type SLR               # filter by loan type
+ *   tsx src/audit.ts --type "Earnest Managed" # SLR + PL only (excludes SLO)
  *   tsx src/audit.ts --output csv             # write results.csv
  */
 
@@ -31,6 +32,24 @@ const outputCsv = args.includes("--output") && args[args.indexOf("--output") + 1
 
 const flagsProvided = partnerFilters.length > 0 || typeFilter !== null || outputCsv;
 
+// "Earnest Managed" (aka "Earnest" / "Owned") = the two products Earnest directly
+// manages, SLR and PL — SLO is typically managed by a third party (e.g. College Finance).
+const EARNEST_MANAGED_TYPES = ["SLR", "PL"];
+const TYPE_ALIASES: Record<string, string[]> = {
+    SLR: ["SLR"],
+    SLO: ["SLO"],
+    PL: ["PL"],
+    EARNEST: EARNEST_MANAGED_TYPES,
+    EARNESTMANAGED: EARNEST_MANAGED_TYPES,
+    OWNED: EARNEST_MANAGED_TYPES,
+};
+
+function resolveTypeFilter(raw: string | null): string[] | null {
+    if (!raw) return null;
+    const key = raw.toUpperCase().replace(/[\s-]/g, "");
+    return TYPE_ALIASES[key] ?? [key];
+}
+
 async function promptForOptions(allPartnerNames: string[]): Promise<{
     partnerFilters: string[];
     typeFilter: string | null;
@@ -54,6 +73,7 @@ async function promptForOptions(allPartnerNames: string[]): Promise<{
             { name: "SLR — Student Loan Refinancing", value: "SLR" },
             { name: "SLO — Student Loan Origination", value: "SLO" },
             { name: "PL  — Personal Loans", value: "PL" },
+            { name: "Earnest Managed — SLR + PL (excludes SLO)", value: "EARNEST" },
         ],
     });
 
@@ -61,14 +81,14 @@ async function promptForOptions(allPartnerNames: string[]): Promise<{
 }
 
 // --- Helpers ---
-function urlsForPartner(p: PartnerRow, urlType: string | null): Array<{ url: string; urlType: string }> {
+function urlsForPartner(p: PartnerRow, urlTypes: string[] | null): Array<{ url: string; urlType: string }> {
     const candidates: Array<{ url: string | undefined; urlType: string }> = [
         { url: p.slrUrl, urlType: "SLR" },
         { url: p.sloUrl, urlType: "SLO" },
         { url: p.plUrl, urlType: "PL" },
     ];
     return candidates
-        .filter(({ url, urlType: t }) => url && (!urlType || t === urlType))
+        .filter(({ url, urlType: t }) => url && (!urlTypes || urlTypes.includes(t)))
         .map(({ url, urlType: t }) => ({ url: url!, urlType: t }));
 }
 
@@ -216,9 +236,10 @@ async function main() {
     }
 
     // Collect all URLs to scrape
+    const resolvedTypeFilters = resolveTypeFilter(resolvedTypeFilter);
     const tasks: Array<{ url: string; urlType: string; partnerName: string }> = [];
     for (const partner of partners) {
-        for (const { url, urlType } of urlsForPartner(partner, resolvedTypeFilter)) {
+        for (const { url, urlType } of urlsForPartner(partner, resolvedTypeFilters)) {
             tasks.push({ url, urlType, partnerName: partner.name });
         }
     }
