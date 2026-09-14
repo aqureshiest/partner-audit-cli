@@ -7,7 +7,7 @@
  *   tsx src/audit.ts --partner "SoFi"         # single partner
  *   tsx src/audit.ts --type SLR               # filter by loan type
  *   tsx src/audit.ts --type "Earnest Managed" # SLR + PL only (excludes SLO)
- *   tsx src/audit.ts --output csv             # write results.csv
+ *   tsx src/audit.ts --output csv             # write audit-YYYY-MM-DD.xlsx
  */
 
 import { config } from "dotenv";
@@ -17,7 +17,7 @@ import { loadPartners, loadComplianceRules, type PartnerRow } from "./sheets.js"
 import { loadOfficialRates } from "./rates.js";
 import { scrapeUrls } from "./scraper.js";
 import { analyzePage, type UrlResult } from "./analyze.js";
-import { writeFileSync } from "fs";
+import { writeWorkbook } from "./report.js";
 import { spawn } from "child_process";
 import { checkbox, select } from "@inquirer/prompts";
 
@@ -81,6 +81,25 @@ async function promptForOptions(allPartnerNames: string[]): Promise<{
 }
 
 // --- Helpers ---
+// Rate Type values start with "HBG" (e.g. "HBG + Partner Discount") or "Non-HBG" —
+// checking the prefix (not just "includes HBG") avoids matching "Non-HBG" itself.
+function isHbgPartner(rateType: string | undefined): boolean {
+    return /^HBG/i.test((rateType ?? "").trim());
+}
+
+function officialRatesFor(
+    urlType: string,
+    isHbg: boolean,
+    officialRates: import("./rates.js").OfficialRate[],
+): import("./rates.js").OfficialRate[] {
+    if (urlType !== "SLR" || !isHbg) return officialRates.filter((r) => r.loanType !== "SLR_HBG");
+    const hbgRate = officialRates.find((r) => r.loanType === "SLR_HBG");
+    if (!hbgRate) return officialRates;
+    return officialRates
+        .filter((r) => r.loanType !== "SLR_HBG" && r.loanType !== "SLR")
+        .concat({ ...hbgRate, loanType: "SLR" });
+}
+
 function urlsForPartner(p: PartnerRow, urlTypes: string[] | null): Array<{ url: string; urlType: string }> {
     const candidates: Array<{ url: string | undefined; urlType: string }> = [
         { url: p.slrUrl, urlType: "SLR" },
@@ -135,73 +154,6 @@ function printResults(results: UrlResult[]) {
     console.log(`  Cost             : $${totalCost.toFixed(4)}`);
 }
 
-function toCsv(results: UrlResult[], officialRates: import("./rates.js").OfficialRate[]): string {
-    // Group by partner name for summary columns
-    const byPartner = new Map<string, UrlResult[]>();
-    for (const r of results) {
-        const list = byPartner.get(r.partnerName) ?? [];
-        list.push(r);
-        byPartner.set(r.partnerName, list);
-    }
-
-    const auditDate = new Date().toLocaleDateString();
-    const officialRatesInfo = officialRates
-        .map((r) => `${r.loanType}: Fixed ${r.fixedLow}%–${r.fixedHigh}%, Variable ${r.variableLow}%–${r.variableHigh}%`)
-        .join("; ");
-
-    const headers = [
-        "Partner Name",
-        "Overall Status",
-        "Urgency",
-        "High Risk Violations Count",
-        "Medium Risk Violations Count",
-        "URL Type",
-        "URL",
-        "Compliance Status",
-        "Violations & Issues",
-        "Scraping Error",
-        "Audit Date",
-        "Official Rates Info",
-    ];
-
-    const rows = results.map((r) => {
-        const partnerResults = byPartner.get(r.partnerName) ?? [r];
-        const hasViolations = partnerResults.some((x) => x.status === "violations");
-        const hasWarnings = partnerResults.some((x) => x.status === "warnings");
-        const overallStatus = hasViolations ? "violations" : hasWarnings ? "warnings" : "compliant";
-        const urgency = hasViolations ? "high" : hasWarnings ? "medium" : "low";
-
-        const highCount = r.violations.filter((v) => v.startsWith("HIGH")).length;
-        const medCount = r.violations.filter((v) => v.startsWith("MEDIUM")).length;
-
-        return [
-            r.partnerName,
-            overallStatus,
-            urgency,
-            highCount,
-            medCount,
-            r.urlType,
-            r.url,
-            r.status,
-            r.violations.join("\n"),
-            r.error ?? "",
-            auditDate,
-            officialRatesInfo,
-        ];
-    });
-
-    return [headers, ...rows]
-        .map((row) =>
-            row.map((cell) => {
-                const s = String(cell);
-                return s.includes(",") || s.includes('"') || s.includes("\n")
-                    ? `"${s.replace(/"/g, '""')}"`
-                    : s;
-            }).join(",")
-        )
-        .join("\n");
-}
-
 // --- Main ---
 async function main() {
     console.log("Loading partners and compliance rules from local CSVs...");
@@ -237,10 +189,10 @@ async function main() {
 
     // Collect all URLs to scrape
     const resolvedTypeFilters = resolveTypeFilter(resolvedTypeFilter);
-    const tasks: Array<{ url: string; urlType: string; partnerName: string }> = [];
+    const tasks: Array<{ url: string; urlType: string; partnerName: string; isHbg: boolean }> = [];
     for (const partner of partners) {
         for (const { url, urlType } of urlsForPartner(partner, resolvedTypeFilters)) {
-            tasks.push({ url, urlType, partnerName: partner.name });
+            tasks.push({ url, urlType, partnerName: partner.name, isHbg: isHbgPartner(partner.rateType) });
         }
     }
 
@@ -258,8 +210,9 @@ async function main() {
     for (const task of tasks) {
         const page = scraped.find((s) => s.url === task.url);
         const content = page?.content ?? "";
-        process.stdout.write(`  ${task.partnerName} [${task.urlType}] ${task.url}... `);
-        const result = await analyzePage(content, task.urlType, task.partnerName, task.url, rules, officialRates);
+        process.stdout.write(`  ${task.partnerName} [${task.urlType}]${task.isHbg && task.urlType === "SLR" ? " (HBG)" : ""} ${task.url}... `);
+        const ratesForTask = officialRatesFor(task.urlType, task.isHbg, officialRates);
+        const result = await analyzePage(content, task.urlType, task.partnerName, task.url, rules, ratesForTask);
         console.log(result.status);
         results.push(result);
     }
@@ -267,8 +220,8 @@ async function main() {
     printResults(results);
 
     if (resolvedOutputCsv) {
-        const filename = `audit-${new Date().toISOString().slice(0, 10)}.csv`;
-        writeFileSync(filename, toCsv(results, officialRates));
+        const filename = `audit-${new Date().toISOString().slice(0, 10)}.xlsx`;
+        await writeWorkbook(filename, results, officialRates);
         console.log(`\nResults saved to ${filename}`);
         openFile(filename);
     }

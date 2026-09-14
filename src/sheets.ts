@@ -8,6 +8,7 @@ export interface PartnerRow {
     slrUrl?: string;
     sloUrl?: string;
     plUrl?: string;
+    rateType?: string;
 }
 
 export interface ComplianceRule {
@@ -37,8 +38,9 @@ function mapPartnerRow(row: Record<string, string>): PartnerRow | null {
     const slrUrl = row["SLR URL"]?.trim() || undefined;
     const sloUrl = row["SLO URL"]?.trim() || undefined;
     const plUrl = row["PL URL"]?.trim() || undefined;
+    const rateType = row["Rate Type"]?.trim() || undefined;
     if (!slrUrl && !sloUrl && !plUrl) return null;
-    return { name, slrUrl, sloUrl, plUrl };
+    return { name, slrUrl, sloUrl, plUrl, rateType };
 }
 
 async function fetchSheetRows(sheetId: string, tabName: string): Promise<Record<string, string>[]> {
