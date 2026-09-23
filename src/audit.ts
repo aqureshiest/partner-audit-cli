@@ -8,6 +8,9 @@
  *   tsx src/audit.ts --type SLR               # filter by loan type
  *   tsx src/audit.ts --type "Earnest Managed" # SLR + PL only (excludes SLO)
  *   tsx src/audit.ts --output csv             # write audit-YYYY-MM-DD.xlsx
+ *   tsx src/audit.ts --for "rate map change"  # tags run as rate-map, auto-scopes to SLR,
+ *                                              # omits SLR Correction sheet
+ *   tsx src/audit.ts --for "quarterly audit"  # tags run as quarterly (also the default)
  */
 
 import { config } from "dotenv";
@@ -18,6 +21,7 @@ import { loadOfficialRates } from "./rates.js";
 import { scrapeUrls } from "./scraper.js";
 import { analyzePage, type UrlResult } from "./analyze.js";
 import { writeWorkbook } from "./report.js";
+import { buildHistoryRecord, loadHistory, pickBaseline, saveHistory, upsertHistory, type RunKind } from "./history.js";
 import { spawn } from "child_process";
 import { checkbox, select } from "@inquirer/prompts";
 
@@ -28,7 +32,19 @@ const partnerFilters: string[] = args
     .filter((v): v is string => v != null);
 const typeIdx = args.indexOf("--type");
 const typeFilter = typeIdx !== -1 ? (args[typeIdx + 1] ?? "").toUpperCase() || null : null;
-const outputCsv = args.includes("--output") && args[args.indexOf("--output") + 1] === "csv";
+const forIdx = args.indexOf("--for");
+const forPhrase = forIdx !== -1 ? (args[forIdx + 1] ?? "") : "";
+// --for alone still implies "produce a report" (matching the interactive prompt's own default),
+// same as explicitly passing --output csv.
+const outputCsvExplicit = args.includes("--output") && args[args.indexOf("--output") + 1] === "csv";
+const outputCsv = outputCsvExplicit || forPhrase !== "";
+
+function resolveRunKind(phrase: string): RunKind {
+    const lower = phrase.toLowerCase();
+    if (lower.includes("rate map") || lower.includes("rate change")) return "rate-map";
+    return "quarterly";
+}
+const runKind = resolveRunKind(forPhrase);
 
 const flagsProvided = partnerFilters.length > 0 || typeFilter !== null || outputCsv;
 
@@ -172,6 +188,9 @@ async function main() {
         resolvedPartnerFilters = answers.partnerFilters;
         resolvedTypeFilter = answers.typeFilter;
         resolvedOutputCsv = answers.outputCsv;
+    } else if (runKind === "rate-map" && typeFilter === null && partnerFilters.length === 0) {
+        // A rate-map check is inherently SLR-only, unless the user explicitly scoped it themselves.
+        resolvedTypeFilter = "SLR";
     }
 
     const partners = resolvedPartnerFilters.length > 0
@@ -220,10 +239,19 @@ async function main() {
     printResults(results);
 
     if (resolvedOutputCsv) {
-        const filename = `audit-${new Date().toISOString().slice(0, 10)}.xlsx`;
-        await writeWorkbook(filename, results, officialRates);
-        console.log(`\nResults saved to ${filename}`);
+        const today = new Date().toISOString().slice(0, 10);
+        const history = loadHistory();
+        const baseline = pickBaseline(history, today, runKind);
+        if (baseline) console.log(`\nComparing against baseline run: ${baseline.date} (${baseline.kind})`);
+        else console.log("\nNo prior comparable run found for a trend comparison.");
+
+        const filename = `audit-${today}.xlsx`;
+        await writeWorkbook(filename, results, officialRates, runKind, baseline);
+        console.log(`Results saved to ${filename}`);
         openFile(filename);
+
+        const currentRecord = buildHistoryRecord(today, runKind, results);
+        saveHistory(upsertHistory(history, currentRecord));
     }
 }
 
