@@ -4,6 +4,7 @@ node_modules/
 
 *.csv
 *.xlsx
+audit-history.json
 *service-account*.json
 *-key*.json
 .DS_Store

@@ -8,6 +8,9 @@
  *   tsx src/audit.ts --type SLR               # filter by loan type
  *   tsx src/audit.ts --type "Earnest Managed" # SLR + PL only (excludes SLO)
  *   tsx src/audit.ts --output csv             # write audit-YYYY-MM-DD.xlsx
+ *   tsx src/audit.ts --for "rate map change"  # tags run as rate-map, auto-scopes to SLR,
+ *                                              # omits SLR Correction sheet
+ *   tsx src/audit.ts --for "quarterly audit"  # tags run as quarterly (also the default)
  */
 
 import { config } from "dotenv";
@@ -18,6 +21,7 @@ import { loadOfficialRates } from "./rates.js";
 import { scrapeUrls } from "./scraper.js";
 import { analyzePage, type UrlResult } from "./analyze.js";
 import { writeWorkbook } from "./report.js";
+import { buildHistoryRecord, loadHistory, pickBaseline, saveHistory, upsertHistory, type RunKind } from "./history.js";
 import { spawn } from "child_process";
 import { checkbox, select } from "@inquirer/prompts";
 
@@ -28,7 +32,19 @@ const partnerFilters: string[] = args
     .filter((v): v is string => v != null);
 const typeIdx = args.indexOf("--type");
 const typeFilter = typeIdx !== -1 ? (args[typeIdx + 1] ?? "").toUpperCase() || null : null;
-const outputCsv = args.includes("--output") && args[args.indexOf("--output") + 1] === "csv";
+const forIdx = args.indexOf("--for");
+const forPhrase = forIdx !== -1 ? (args[forIdx + 1] ?? "") : "";
+// --for alone still implies "produce a report" (matching the interactive prompt's own default),
+// same as explicitly passing --output csv.
+const outputCsvExplicit = args.includes("--output") && args[args.indexOf("--output") + 1] === "csv";
+const outputCsv = outputCsvExplicit || forPhrase !== "";
+
+function resolveRunKind(phrase: string): RunKind {
+    const lower = phrase.toLowerCase();
+    if (lower.includes("rate map") || lower.includes("rate change")) return "rate-map";
+    return "quarterly";
+}
+const runKind = resolveRunKind(forPhrase);
 
 const flagsProvided = partnerFilters.length > 0 || typeFilter !== null || outputCsv;
 
@@ -87,17 +103,57 @@ function isHbgPartner(rateType: string | undefined): boolean {
     return /^HBG/i.test((rateType ?? "").trim());
 }
 
+// Column E ("Rate Type") marks partners who get a rate discount, e.g. "HBG + Partner Discount".
+function hasPartnerDiscount(rateType: string | undefined): boolean {
+    return /discount/i.test(rateType ?? "");
+}
+
+// Column D ("Partner Disount/ Bonus") mixes two things: a rate discount in percentage points
+// (written as "-0.25%" or as the equivalent decimal fraction "-0.0025"), or a flat dollar bonus
+// to the borrower (e.g. "300", "150") which isn't a rate adjustment at all — per confirmed
+// business rule, any value whose magnitude is over 1 (once any "%" is stripped) is a dollar
+// bonus and should be ignored here.
+function parseDiscountPct(raw: string | undefined): number | null {
+    const s = (raw ?? "").trim();
+    if (!s || s.toLowerCase() === "none") return null;
+    const hasPercentSign = s.endsWith("%");
+    const num = parseFloat(hasPercentSign ? s.slice(0, -1) : s);
+    if (Number.isNaN(num)) return null;
+    if (hasPercentSign) return num;
+    if (Math.abs(num) > 1) return null; // e.g. "300" — a dollar bonus, not a rate discount
+    return num * 100; // e.g. "-0.0025" -> -0.25 percentage points
+}
+
+function applyDiscount(rate: import("./rates.js").OfficialRate, pct: number): import("./rates.js").OfficialRate {
+    return {
+        ...rate,
+        fixedLow: rate.fixedLow + pct,
+        fixedHigh: rate.fixedHigh + pct,
+        variableLow: rate.variableLow + pct,
+        variableHigh: rate.variableHigh + pct,
+    };
+}
+
 function officialRatesFor(
     urlType: string,
-    isHbg: boolean,
+    partner: PartnerRow,
     officialRates: import("./rates.js").OfficialRate[],
 ): import("./rates.js").OfficialRate[] {
-    if (urlType !== "SLR" || !isHbg) return officialRates.filter((r) => r.loanType !== "SLR_HBG");
-    const hbgRate = officialRates.find((r) => r.loanType === "SLR_HBG");
-    if (!hbgRate) return officialRates;
-    return officialRates
-        .filter((r) => r.loanType !== "SLR_HBG" && r.loanType !== "SLR")
-        .concat({ ...hbgRate, loanType: "SLR" });
+    const isHbg = isHbgPartner(partner.rateType);
+    let rates = officialRates.filter((r) => r.loanType !== "SLR_HBG");
+    if (urlType === "SLR" && isHbg) {
+        const hbgRate = officialRates.find((r) => r.loanType === "SLR_HBG");
+        if (hbgRate) rates = rates.filter((r) => r.loanType !== "SLR").concat({ ...hbgRate, loanType: "SLR" });
+    }
+
+    if ((urlType === "SLR" || urlType === "PL") && hasPartnerDiscount(partner.rateType)) {
+        const discountPct = parseDiscountPct(partner.discount);
+        if (discountPct !== null) {
+            rates = rates.map((r) => (r.loanType === urlType ? applyDiscount(r, discountPct) : r));
+        }
+    }
+
+    return rates;
 }
 
 function urlsForPartner(p: PartnerRow, urlTypes: string[] | null): Array<{ url: string; urlType: string }> {
@@ -172,6 +228,9 @@ async function main() {
         resolvedPartnerFilters = answers.partnerFilters;
         resolvedTypeFilter = answers.typeFilter;
         resolvedOutputCsv = answers.outputCsv;
+    } else if (runKind === "rate-map" && typeFilter === null && partnerFilters.length === 0) {
+        // A rate-map check is inherently SLR-only, unless the user explicitly scoped it themselves.
+        resolvedTypeFilter = "SLR";
     }
 
     const partners = resolvedPartnerFilters.length > 0
@@ -189,10 +248,10 @@ async function main() {
 
     // Collect all URLs to scrape
     const resolvedTypeFilters = resolveTypeFilter(resolvedTypeFilter);
-    const tasks: Array<{ url: string; urlType: string; partnerName: string; isHbg: boolean }> = [];
+    const tasks: Array<{ url: string; urlType: string; partnerName: string; partner: PartnerRow }> = [];
     for (const partner of partners) {
         for (const { url, urlType } of urlsForPartner(partner, resolvedTypeFilters)) {
-            tasks.push({ url, urlType, partnerName: partner.name, isHbg: isHbgPartner(partner.rateType) });
+            tasks.push({ url, urlType, partnerName: partner.name, partner });
         }
     }
 
@@ -210,8 +269,10 @@ async function main() {
     for (const task of tasks) {
         const page = scraped.find((s) => s.url === task.url);
         const content = page?.content ?? "";
-        process.stdout.write(`  ${task.partnerName} [${task.urlType}]${task.isHbg && task.urlType === "SLR" ? " (HBG)" : ""} ${task.url}... `);
-        const ratesForTask = officialRatesFor(task.urlType, task.isHbg, officialRates);
+        const isHbg = isHbgPartner(task.partner.rateType);
+        const discountTag = hasPartnerDiscount(task.partner.rateType) ? " (Discount)" : "";
+        process.stdout.write(`  ${task.partnerName} [${task.urlType}]${isHbg && task.urlType === "SLR" ? " (HBG)" : ""}${discountTag} ${task.url}... `);
+        const ratesForTask = officialRatesFor(task.urlType, task.partner, officialRates);
         const result = await analyzePage(content, task.urlType, task.partnerName, task.url, rules, ratesForTask);
         console.log(result.status);
         results.push(result);
@@ -220,10 +281,19 @@ async function main() {
     printResults(results);
 
     if (resolvedOutputCsv) {
-        const filename = `audit-${new Date().toISOString().slice(0, 10)}.xlsx`;
-        await writeWorkbook(filename, results, officialRates);
-        console.log(`\nResults saved to ${filename}`);
+        const today = new Date().toISOString().slice(0, 10);
+        const history = loadHistory();
+        const baseline = pickBaseline(history, today, runKind);
+        if (baseline) console.log(`\nComparing against baseline run: ${baseline.date} (${baseline.kind})`);
+        else console.log("\nNo prior comparable run found for a trend comparison.");
+
+        const filename = `audit-${today}.xlsx`;
+        await writeWorkbook(filename, results, officialRates, runKind, baseline);
+        console.log(`Results saved to ${filename}`);
         openFile(filename);
+
+        const currentRecord = buildHistoryRecord(today, runKind, results);
+        saveHistory(upsertHistory(history, currentRecord));
     }
 }
 
