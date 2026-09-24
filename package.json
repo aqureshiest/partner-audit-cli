@@ -6,7 +6,8 @@
   "scripts": {
     "preaudit": "git pull --ff-only -q && npm ci --prefer-offline --silent 2>/dev/null || true",
     "audit": "tsx src/audit.ts",
-    "compare": "tsx src/compare.ts"
+    "compare": "tsx src/compare.ts",
+    "connect-gmail": "tsx src/connect-gmail.ts"
   },
   "dependencies": {
     "@aws-sdk/client-bedrock-runtime": "^3.0.0",

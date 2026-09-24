@@ -7,4 +7,6 @@ node_modules/
 audit-history.json
 *service-account*.json
 *-key*.json
+client_secret_*.json
+gmail-token.json
 .DS_Store
