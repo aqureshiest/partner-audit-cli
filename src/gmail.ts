@@ -100,17 +100,26 @@ function loadGmailClient(): OAuth2Client {
     return client;
 }
 
-function encodeMimeMessage(to: string, subject: string, htmlBody: string): string {
-    const message = [`To: ${to}`, `Subject: ${subject}`, "Content-Type: text/html; charset=utf-8", "", htmlBody].join("\r\n");
-    return Buffer.from(message).toString("base64url");
+function encodeMimeMessage(to: string, subject: string, htmlBody: string, cc?: string): string {
+    const headers = [`To: ${to}`, ...(cc ? [`Cc: ${cc}`] : []), `Subject: ${subject}`, "Content-Type: text/html; charset=utf-8"];
+    return Buffer.from([...headers, "", htmlBody].join("\r\n")).toString("base64url");
 }
 
-/** `body` is treated as HTML (so bold/line breaks render) — plain text with no markup still displays fine. */
-export async function createGmailDraft(to: string, subject: string, body: string): Promise<void> {
+/** `body` is treated as HTML (so bold/line breaks render) — plain text with no markup still displays fine.
+ * Returns the draft's id, for use with sendGmailDraft once reviewed. */
+export async function createGmailDraft(to: string, subject: string, body: string, cc?: string): Promise<string> {
     const auth = loadGmailClient();
     const gmail = google.gmail({ version: "v1", auth });
-    await gmail.users.drafts.create({
+    const res = await gmail.users.drafts.create({
         userId: "me",
-        requestBody: { message: { raw: encodeMimeMessage(to, subject, body) } },
+        requestBody: { message: { raw: encodeMimeMessage(to, subject, body, cc) } },
     });
+    return res.data.id!;
+}
+
+/** Sends an existing draft as-is (whatever is currently saved in Gmail) — run only after reviewing it. */
+export async function sendGmailDraft(draftId: string): Promise<void> {
+    const auth = loadGmailClient();
+    const gmail = google.gmail({ version: "v1", auth });
+    await gmail.users.drafts.send({ userId: "me", requestBody: { id: draftId } });
 }

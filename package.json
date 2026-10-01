@@ -8,7 +8,8 @@
     "audit": "tsx src/audit.ts",
     "compare": "tsx src/compare.ts",
     "connect-gmail": "tsx src/connect-gmail.ts",
-    "generate-emails": "tsx src/generate-emails.ts"
+    "generate-emails": "tsx src/generate-emails.ts",
+    "send-draft": "tsx src/send-draft.ts"
   },
   "dependencies": {
     "@aws-sdk/client-bedrock-runtime": "^3.0.0",

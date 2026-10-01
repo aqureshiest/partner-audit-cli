@@ -31,6 +31,9 @@ function isHbgPartner(rateType: string | undefined): boolean {
     return /^HBG/i.test((rateType ?? "").trim());
 }
 
+// Every correction email gets these on Cc, per standard practice.
+const STANDARD_CC = "partnerships@earnest.com, alanna.jones@earnest.com";
+
 interface CorrectionRow {
     partner: string;
     complianceStatus: string;
@@ -186,12 +189,13 @@ async function main() {
         const body = buildEmailBody({ quarter, year, slrRate, corrections: linkGroups, respondByDate: respondBy! });
         const to = contacts.map((c) => c.email).join(", ");
 
-        await createGmailDraft(to, subject, body);
-        console.log(`  Draft created for ${partnerName} -> ${to}`);
+        const draftId = await createGmailDraft(to, subject, body, STANDARD_CC);
+        console.log(`  Draft created for ${partnerName} -> ${to} (cc: ${STANDARD_CC}) [draft id: ${draftId}]`);
         created++;
     }
 
-    console.log(`\n${created} draft(s) created.`);
+    console.log(`\n${created} draft(s) created. Review each in Gmail, then send with:`);
+    console.log('  npm run send-draft -- "<draft id>"');
     if (skipped.length > 0) {
         console.log(`Skipped (no compliance contact found — needs manual handling): ${skipped.join(", ")}`);
     }
