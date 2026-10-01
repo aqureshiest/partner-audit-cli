@@ -100,11 +100,12 @@ function loadGmailClient(): OAuth2Client {
     return client;
 }
 
-function encodeMimeMessage(to: string, subject: string, body: string): string {
-    const message = [`To: ${to}`, `Subject: ${subject}`, "Content-Type: text/plain; charset=utf-8", "", body].join("\r\n");
+function encodeMimeMessage(to: string, subject: string, htmlBody: string): string {
+    const message = [`To: ${to}`, `Subject: ${subject}`, "Content-Type: text/html; charset=utf-8", "", htmlBody].join("\r\n");
     return Buffer.from(message).toString("base64url");
 }
 
+/** `body` is treated as HTML (so bold/line breaks render) — plain text with no markup still displays fine. */
 export async function createGmailDraft(to: string, subject: string, body: string): Promise<void> {
     const auth = loadGmailClient();
     const gmail = google.gmail({ version: "v1", auth });

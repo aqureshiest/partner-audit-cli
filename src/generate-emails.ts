@@ -14,7 +14,7 @@ import { downloadReportFromDrive } from "./drive.js";
 import { loadPartners } from "./sheets.js";
 import type { OfficialRate } from "./rates.js";
 import { loadComplianceContacts, findContactsForPartner } from "./contacts.js";
-import { buildEmailSubject, buildEmailBody, type CorrectionItem } from "./email-template.js";
+import { buildEmailSubject, buildEmailBody, type LinkGroup } from "./email-template.js";
 import { createGmailDraft, checkGmailSetup } from "./gmail.js";
 
 const args = process.argv.slice(2);
@@ -93,6 +93,25 @@ function quarterOf(date: Date): number {
     return Math.floor(date.getMonth() / 3) + 1;
 }
 
+/**
+ * One row (one URL) becomes one Link group. If compliance wrote one correction line
+ * per finding line (same count, in order), each becomes its own numbered Example —
+ * otherwise, the whole row collapses into a single Example covering all findings,
+ * paired with the single correction text as written.
+ */
+function buildLinkGroup(row: CorrectionRow): LinkGroup {
+    const findingLines = row.findings.split("\n").map((l) => l.trim()).filter(Boolean);
+    const correctionLines = row.corrections.split("\n").map((l) => l.trim()).filter(Boolean);
+
+    if (findingLines.length > 1 && findingLines.length === correctionLines.length) {
+        return {
+            link: row.url,
+            examples: findingLines.map((example, i) => ({ example, correction: correctionLines[i] })),
+        };
+    }
+    return { link: row.url, examples: [{ example: row.findings, correction: row.corrections }] };
+}
+
 async function main() {
     const gmailStatus = checkGmailSetup();
     if (!gmailStatus.connected) {
@@ -120,9 +139,8 @@ async function main() {
 
     const officialRates = readOfficialRates(summarySheet);
     const slrRate = officialRates.find((r) => r.loanType === "SLR");
-    const sloRate = officialRates.find((r) => r.loanType === "SLO");
-    if (!slrRate || !sloRate) {
-        console.error('Could not find SLR/SLO rate data in this report\'s Summary tab ("Rate Data" section).');
+    if (!slrRate) {
+        console.error('Could not find SLR rate data in this report\'s Summary tab ("Rate Data" section).');
         process.exit(1);
     }
 
@@ -162,14 +180,10 @@ async function main() {
             continue;
         }
 
-        const items: CorrectionItem[] = correctionRows.map((r) => ({
-            example: r.findings,
-            link: r.url,
-            correction: r.corrections,
-        }));
+        const linkGroups: LinkGroup[] = correctionRows.map(buildLinkGroup);
 
         const subject = buildEmailSubject(quarter, year);
-        const body = buildEmailBody({ quarter, year, slrRate, sloRate, corrections: items, respondByDate: respondBy! });
+        const body = buildEmailBody({ quarter, year, slrRate, corrections: linkGroups, respondByDate: respondBy! });
         const to = contacts.map((c) => c.email).join(", ");
 
         await createGmailDraft(to, subject, body);
