@@ -4,6 +4,9 @@ export interface OfficialRate {
     fixedHigh: number;
     variableLow: number;
     variableHigh: number;
+    /** From the live API, for citing "last updated" in partner emails. Null when fallback values were used. */
+    rateMapVersion: string | null;
+    effectiveDate: string | null;
 }
 
 interface RateRange {
@@ -11,18 +14,22 @@ interface RateRange {
     fixedHigh: number;
     variableLow: number;
     variableHigh: number;
+    rateMapVersion: string | null;
+    effectiveDate: string | null;
 }
 
 // Safety-net values only used if the live rate API is unreachable — not authoritative.
 const FALLBACK: Record<"SLR" | "SLR_HBG" | "SLO" | "PL", RateRange> = {
-    SLR: { fixedLow: 4.35, fixedHigh: 9.99, variableLow: 5.88, variableHigh: 9.99 },
-    SLR_HBG: { fixedLow: 3.83, fixedHigh: 9.99, variableLow: 5.73, variableHigh: 9.99 },
-    SLO: { fixedLow: 2.95, fixedHigh: 16.49, variableLow: 4.99, variableHigh: 16.85 },
+    SLR: { fixedLow: 4.35, fixedHigh: 9.99, variableLow: 5.88, variableHigh: 9.99, rateMapVersion: null, effectiveDate: null },
+    SLR_HBG: { fixedLow: 3.83, fixedHigh: 9.99, variableLow: 5.73, variableHigh: 9.99, rateMapVersion: null, effectiveDate: null },
+    SLO: { fixedLow: 2.95, fixedHigh: 16.49, variableLow: 4.99, variableHigh: 16.85, rateMapVersion: null, effectiveDate: null },
     // PL is fixed-rate only (the API returns no "variable" entry) — variable mirrors fixed.
-    PL: { fixedLow: 6.74, fixedHigh: 25.49, variableLow: 6.74, variableHigh: 25.49 },
+    PL: { fixedLow: 6.74, fixedHigh: 25.49, variableLow: 6.74, variableHigh: 25.49, rateMapVersion: null, effectiveDate: null },
 };
 
 interface HeadlineRatesResponse {
+    rate_map_version: string;
+    effective_date: string;
     rates: Array<{ rate_low: number; rate_high: number; rate_type: "fixed" | "variable" }>;
 }
 
@@ -38,6 +45,8 @@ async function fetchRateRange(url: string): Promise<RateRange | null> {
             // Some products (e.g. PL) are fixed-rate only and have no "variable" entry.
             variableLow: variable?.rate_low ?? fixed.rate_low,
             variableHigh: variable?.rate_high ?? fixed.rate_high,
+            rateMapVersion: json.rate_map_version ?? null,
+            effectiveDate: json.effective_date ?? null,
         };
     } catch {
         return null;

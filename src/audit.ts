@@ -22,6 +22,7 @@ import { scrapeUrls } from "./scraper.js";
 import { analyzePage, type UrlResult } from "./analyze.js";
 import { writeWorkbook } from "./report.js";
 import { buildHistoryRecord, loadHistory, pickBaseline, saveHistory, upsertHistory, type RunKind } from "./history.js";
+import { uploadReportToDrive } from "./drive.js";
 import { spawn } from "child_process";
 import { checkbox, select } from "@inquirer/prompts";
 
@@ -291,6 +292,14 @@ async function main() {
         await writeWorkbook(filename, results, officialRates, runKind, baseline);
         console.log(`Results saved to ${filename}`);
         openFile(filename);
+
+        try {
+            const driveLink = await uploadReportToDrive(filename, runKind, new Date());
+            console.log(`Uploaded to Drive: ${driveLink}`);
+        } catch (err) {
+            const message = err instanceof Error ? err.message : String(err);
+            console.warn(`Could not upload to Drive (${message}). The local file is still saved at ${filename}.`);
+        }
 
         const currentRecord = buildHistoryRecord(today, runKind, results);
         saveHistory(upsertHistory(history, currentRecord));
