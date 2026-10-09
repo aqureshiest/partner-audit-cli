@@ -255,6 +255,16 @@ export async function writeWorkbook(
     addTableHeader(["Category", "Count"]);
     if (summary.topCategories.length === 0) s.addRow(["(none)"]);
     for (const [category, count] of summary.topCategories) s.addRow([category, count]);
+    s.addRow([]);
+
+    // Structured (not just human-readable) rate data this run used — read back by the
+    // email-generation step so correction emails cite the rates as of the audit, not
+    // whatever is live by the time the email gets sent.
+    addSectionHeader("Rate Data (for internal use — do not edit)");
+    addTableHeader(["Loan Type", "Fixed Low", "Fixed High", "Variable Low", "Variable High", "Rate Map Version", "Effective Date"]);
+    for (const o of officialRates) {
+        s.addRow([o.loanType, o.fixedLow, o.fixedHigh, o.variableLow, o.variableHigh, o.rateMapVersion ?? "", o.effectiveDate ?? ""]);
+    }
 
     // --- Results sheet ---
     const r = wb.addWorksheet("Results");
