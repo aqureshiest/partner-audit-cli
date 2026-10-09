@@ -1,6 +1,13 @@
 import ExcelJS from "exceljs";
 import type { UrlResult } from "./analyze.js";
 import type { OfficialRate } from "./rates.js";
+import {
+    buildHistoryRecord,
+    computePageTrend,
+    computePartnerTrend,
+    type HistoryRecord,
+    type RunKind,
+} from "./history.js";
 
 interface PartnerRollup {
     partnerName: string;
@@ -83,20 +90,43 @@ function pct(n: number, total: number): string {
     return total > 0 ? `${((100 * n) / total).toFixed(1)}%` : "—";
 }
 
+function fmtCountDelta(delta: number | null): string {
+    if (delta === null) return "new";
+    if (delta === 0) return "flat";
+    return delta > 0 ? `+${delta}` : `${delta}`;
+}
+
+function fmtPtsDelta(delta: number | null): string {
+    if (delta === null) return "—";
+    if (Math.abs(delta) < 0.05) return "flat";
+    return `${delta > 0 ? "+" : ""}${delta.toFixed(1)} pts`;
+}
+
+function runKindLabel(kind: RunKind, urlTypes: string[]): string {
+    const types = [...new Set(urlTypes)];
+    if (kind === "rate-map") return `Rate-Map Check — ${types.join("/") || "SLR"} only`;
+    return types.length > 1 ? "Quarterly Audit — all types" : `Quarterly Audit — ${types[0] ?? ""} only`;
+}
+
 export async function writeWorkbook(
     filename: string,
     results: UrlResult[],
     officialRates: OfficialRate[],
+    kind: RunKind,
+    baseline: HistoryRecord | null,
 ): Promise<void> {
     const auditDate = new Date().toLocaleDateString();
     const summary = computeSummary(results);
+    const currentRecord = buildHistoryRecord(new Date().toISOString().slice(0, 10), kind, results);
+    const pageTrend = baseline ? computePageTrend(currentRecord.pages, baseline) : null;
+    const partnerTrend = baseline ? computePartnerTrend(currentRecord.partners, currentRecord.pages, baseline) : null;
 
     const wb = new ExcelJS.Workbook();
 
     // --- Summary sheet ---
     const s = wb.addWorksheet("Summary");
     s.getColumn(1).width = 34;
-    s.getColumn(2).width = 14;
+    s.getColumn(2).width = 16;
     s.getColumn(3).width = 14;
     s.getColumn(4).width = 14;
     s.getColumn(5).width = 14;
@@ -113,6 +143,77 @@ export async function writeWorkbook(
     };
 
     s.addRow([`Executive Summary — Audit run ${auditDate}`]).font = { bold: true, size: 15 };
+    s.addRow([runKindLabel(kind, results.map((r) => r.urlType))]).font = { italic: true };
+    s.addRow([]);
+
+    // --- A. Executive Summary ---
+    addSectionHeader("Executive Summary");
+    const pageCompliancePct = summary.totalPages > 0 ? (100 * summary.pageStatus.compliant) / summary.totalPages : 0;
+    const highRiskPartnerCount = currentRecord.partners.filter((p) => p.highCount > 0).length;
+
+    let trendSentence: string;
+    if (!pageTrend || pageTrend.matchedCount === 0) {
+        trendSentence = "No prior comparable run found — this is the first tracked run of this kind.";
+    } else {
+        const net = pageTrend.baselineHighSum - pageTrend.currentHighSum; // positive = improved
+        const direction = net > 0 ? "Improved" : net < 0 ? "Declined" : "Flat";
+        trendSentence = `${direction} vs. the ${baseline!.date} run — on the ${pageTrend.matchedCount} pages audited both times, ` +
+            `${pageTrend.improved} improved, ${pageTrend.regressed} regressed, ${pageTrend.unchanged} unchanged.`;
+    }
+
+    s.addRow([
+        `${summary.totalPartners} partners, ${summary.totalPages} pages. ${pageCompliancePct.toFixed(0)}% of pages fully compliant; ` +
+        `${highRiskPartnerCount} of ${summary.totalPartners} partners carry at least one high-risk violation. ${trendSentence}`,
+    ]).alignment = { wrapText: true };
+    s.addRow([]);
+
+    addTableHeader(["Metric", "Value", "vs. prior*"]);
+    s.addRow([
+        "Page compliance rate",
+        `${pct(summary.pageStatus.compliant, summary.totalPages)} (${summary.pageStatus.compliant}/${summary.totalPages})`,
+        pageTrend ? fmtPtsDelta(pageTrend.matchedCount > 0
+            ? (100 * pageTrend.currentCompliantCount) / pageTrend.matchedCount - (100 * pageTrend.baselineCompliantCount) / pageTrend.matchedCount
+            : null) : "—",
+    ]);
+    s.addRow([
+        "Partner compliance rate",
+        `${pct(summary.partnerStatus.fullyCompliant, summary.totalPartners)} (${summary.partnerStatus.fullyCompliant}/${summary.totalPartners})`,
+        partnerTrend ? fmtPtsDelta(partnerTrend.matchedPartnerCount > 0
+            ? (100 * partnerTrend.currentCompliantCount) / partnerTrend.matchedPartnerCount - (100 * partnerTrend.baselineCompliantCount) / partnerTrend.matchedPartnerCount
+            : null) : "—",
+    ]);
+    s.addRow([
+        "Partners with ≥1 high-risk flag",
+        `${highRiskPartnerCount} of ${summary.totalPartners}`,
+        partnerTrend ? fmtCountDelta(partnerTrend.currentWithHighRiskCount - partnerTrend.baselineWithHighRiskCount) : "—",
+    ]);
+    s.addRow([
+        "High-risk violation flags",
+        summary.riskTotals.high,
+        pageTrend ? fmtCountDelta(pageTrend.currentHighSum - pageTrend.baselineHighSum) : "—",
+    ]);
+    s.addRow([
+        "Pages not analyzed",
+        `${summary.pageStatus.blocked + summary.pageStatus.error} of ${summary.totalPages}`,
+        pageTrend ? fmtCountDelta(pageTrend.currentNotAnalyzedCount - pageTrend.baselineNotAnalyzedCount) : "—",
+    ]);
+    if (baseline) {
+        s.addRow(["* Deltas compare only pages/partners audited in both runs (matched by URL) — not raw run totals, since page coverage differs run to run."]).font = { italic: true, size: 9 };
+    }
+    s.addRow([]);
+
+    // --- B. Partners Needing the Most Attention ---
+    addSectionHeader("Partners Needing the Most Attention (by high-risk violation count)");
+    addTableHeader(["Partner", "High-risk violations", "vs. prior", "Pages"]);
+    if (summary.topPartners.length === 0) s.addRow(["(none)"]);
+    for (const p of summary.topPartners) {
+        const delta = partnerTrend ? partnerTrend.highCountDeltaByPartner.get(p.partnerName) ?? null : null;
+        s.addRow([p.partnerName, p.highCount, partnerTrend ? fmtCountDelta(delta) : "—", p.pageCount]);
+    }
+    s.addRow([]);
+
+    // --- C. Details ---
+    addSectionHeader("Details");
     s.addRow([]);
 
     addSectionHeader("Overview");
@@ -154,12 +255,6 @@ export async function writeWorkbook(
     addTableHeader(["Category", "Count"]);
     if (summary.topCategories.length === 0) s.addRow(["(none)"]);
     for (const [category, count] of summary.topCategories) s.addRow([category, count]);
-    s.addRow([]);
-
-    addSectionHeader("Partners needing the most attention (by high-risk violation count)");
-    addTableHeader(["Partner", "High-risk violations"]);
-    if (summary.topPartners.length === 0) s.addRow(["(none)"]);
-    for (const p of summary.topPartners) s.addRow([p.partnerName, p.highCount]);
 
     // --- Results sheet ---
     const r = wb.addWorksheet("Results");
@@ -204,9 +299,9 @@ export async function writeWorkbook(
     }
     for (const row of r.getRows(2, results.length) ?? []) row.alignment = { wrapText: true, vertical: "top" };
 
-    // --- SLR Partner Audit & Correction sheet (only when SLR pages were audited) ---
+    // --- SLR Partner Audit & Correction sheet (only for quarterly runs with SLR pages) ---
     const slrResults = results.filter((res) => res.urlType === "SLR");
-    if (slrResults.length > 0) {
+    if (kind !== "rate-map" && slrResults.length > 0) {
         const c = wb.addWorksheet("SLR Partner Audit & Correction");
         c.columns = [
             { header: "Partner", key: "partner", width: 24 },

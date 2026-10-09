@@ -9,6 +9,7 @@ export interface PartnerRow {
     sloUrl?: string;
     plUrl?: string;
     rateType?: string;
+    discount?: string;
 }
 
 export interface ComplianceRule {
@@ -39,8 +40,9 @@ function mapPartnerRow(row: Record<string, string>): PartnerRow | null {
     const sloUrl = row["SLO URL"]?.trim() || undefined;
     const plUrl = row["PL URL"]?.trim() || undefined;
     const rateType = row["Rate Type"]?.trim() || undefined;
+    const discount = (row["Partner Disount/ Bonus"] ?? row["Partner Discount"])?.trim() || undefined;
     if (!slrUrl && !sloUrl && !plUrl) return null;
-    return { name, slrUrl, sloUrl, plUrl, rateType };
+    return { name, slrUrl, sloUrl, plUrl, rateType, discount };
 }
 
 async function fetchSheetRows(sheetId: string, tabName: string): Promise<Record<string, string>[]> {
